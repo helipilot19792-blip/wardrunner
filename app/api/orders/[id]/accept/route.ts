@@ -14,7 +14,7 @@ type CreateOrderBody = {
 
 export async function POST(req: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     let body: CreateOrderBody;
     try {
