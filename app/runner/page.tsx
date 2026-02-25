@@ -148,11 +148,11 @@ async function accept(id: string) {
 
   if (!data || (Array.isArray(data) && data.length === 0)) {
     setStatus("Order already taken or expired.");
-    await load(id);
+    await load();
     return;
   }
 
-  await load(id);
+  await load();
   setStatus("Accepted!");
   setTimeout(() => setStatus(""), 800);
 }
