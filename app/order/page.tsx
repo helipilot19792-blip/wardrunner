@@ -1,5 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
+import { Suspense } from "react";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -42,7 +43,7 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
-export default function OrderPage() {
+function OrderPageInner() {
   const searchParams = useSearchParams();
   const draftIdFromUrl = searchParams.get("draftId"); // may exist from review page v2
 
@@ -520,5 +521,12 @@ export default function OrderPage() {
         </section>
       </div>
     </main>
+  );
+}
+export default function OrderPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading…</div>}>
+      <OrderPageInner />
+    </Suspense>
   );
 }
