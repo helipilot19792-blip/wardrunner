@@ -18,6 +18,7 @@ type OrderRow = {
   created_at: string;
   runner_id: string | null;
   expires_at: string | null;
+   notes: string | null;
   order_items?: OrderItemRow[];
 };
 
@@ -109,20 +110,21 @@ export default function RunnerPage() {
 
     // ✅ One select string used everywhere (includes order_items)
     const orderSelect = `
-      id,
-      status,
-      store,
-      delivery_destination,
-      created_at,
-      runner_id,
-      expires_at,
-      order_items (
-        id,
-        name,
-        qty,
-        notes
-      )
-    `;
+  id,
+  status,
+  store,
+  delivery_destination,
+  created_at,
+  runner_id,
+  expires_at,
+  notes,
+  order_items (
+    id,
+    name,
+    qty,
+    notes
+  )
+`;
 
     // QUEUE: queued + unassigned + not expired
     const { data: qData, error: qErr } = await supabase
@@ -274,7 +276,22 @@ export default function RunnerPage() {
         <div style={{ opacity: 0.8, fontSize: 13 }}>
           {o.status} • {new Date(o.created_at).toLocaleString()}
         </div>
-
+{o.notes && o.notes.trim() ? (
+  <div
+    style={{
+      marginTop: 8,
+      padding: "10px 12px",
+      borderRadius: 14,
+      border: "2px solid rgba(255,255,255,0.25)",
+      background: "rgba(255,255,255,0.06)",
+      fontSize: 16,
+      fontWeight: 900,
+      letterSpacing: 0.3,
+    }}
+  >
+    ⚠ ORDER NOTE: {o.notes}
+  </div>
+) : null}
         <div style={{ marginTop: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>Items</div>
 
