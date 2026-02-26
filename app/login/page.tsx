@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -26,10 +27,6 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: {
-            // ✅ user clicks verification email -> comes back here
-            emailRedirectTo: `${window.location.origin}/auth/confirm`,
-          },
         });
 
         if (error) {
@@ -37,7 +34,7 @@ export default function LoginPage() {
           return;
         }
 
-        setStatus("Account created. Check your email to verify, then you can sign in.");
+        setStatus("Account created. You can now sign in.");
         setMode("signin");
         return;
       }
@@ -52,7 +49,7 @@ export default function LoginPage() {
         return;
       }
 
-      // ✅ logged in
+      // Successful login
       window.location.href = "/account";
     } finally {
       setBusy(false);
@@ -69,9 +66,12 @@ export default function LoginPage() {
     setStatus("Sending password reset email...");
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/account?reset=1`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        {
+          redirectTo: `${window.location.origin}/account?reset=1`,
+        }
+      );
 
       if (error) {
         setStatus(`Error: ${error.message}`);
@@ -93,10 +93,11 @@ export default function LoginPage() {
 
         <p style={{ opacity: 0.8, marginBottom: 16 }}>
           {mode === "signup"
-            ? "Create an account with email + password. You’ll verify once by email."
+            ? "Create an account with email + password."
             : "Sign in with your email + password."}
         </p>
 
+        {/* Email */}
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -113,23 +114,54 @@ export default function LoginPage() {
           }}
         />
 
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+        {/* Password + Toggle */}
+        <div
           style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 12,
-            border: "1px solid #333",
-            background: "transparent",
-            color: "inherit",
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
             marginBottom: 12,
           }}
-        />
+        >
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoComplete={
+              mode === "signup" ? "new-password" : "current-password"
+            }
+            style={{
+              flex: 1,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #333",
+              background: "transparent",
+              color: "inherit",
+            }}
+          />
 
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            disabled={busy}
+            style={{
+              padding: "12px 12px",
+              borderRadius: 12,
+              border: "1px solid #333",
+              background: "transparent",
+              color: "inherit",
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.7 : 1,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+
+        {/* Submit */}
         <button
           onClick={handleSubmit}
           disabled={busy}
@@ -146,9 +178,14 @@ export default function LoginPage() {
             marginBottom: 12,
           }}
         >
-          {busy ? "Please wait..." : mode === "signup" ? "Create Account" : "Sign In"}
+          {busy
+            ? "Please wait..."
+            : mode === "signup"
+            ? "Create Account"
+            : "Sign In"}
         </button>
 
+        {/* Forgot Password */}
         {mode === "signin" && (
           <button
             onClick={sendReset}
@@ -168,6 +205,7 @@ export default function LoginPage() {
           </button>
         )}
 
+        {/* Toggle Mode */}
         <button
           onClick={() => {
             setStatus("");
@@ -184,11 +222,15 @@ export default function LoginPage() {
             opacity: busy ? 0.7 : 1,
           }}
         >
-          {mode === "signup" ? "Already have an account? Sign in" : "New user? Create account"}
+          {mode === "signup"
+            ? "Already have an account? Sign in"
+            : "New user? Create account"}
         </button>
 
         {status && (
-          <p style={{ marginTop: 14, fontSize: 14, opacity: 0.85 }}>{status}</p>
+          <p style={{ marginTop: 14, fontSize: 14, opacity: 0.85 }}>
+            {status}
+          </p>
         )}
       </div>
     </main>
