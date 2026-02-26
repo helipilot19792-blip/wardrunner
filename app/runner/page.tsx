@@ -58,14 +58,12 @@ export default function RunnerPage() {
   const [showHistory, setShowHistory] = useState(false);
 
   async function checkRunnerAccess(email: string) {
-    // must match your table name: runner_allowlist(email text primary key)
     const { data, error } = await supabase
       .from("runner_allowlist")
       .select("email")
       .eq("email", email)
       .maybeSingle();
 
-    // If RLS blocks or no row, treat as not-runner
     if (error || !data) return false;
     return true;
   }
@@ -73,14 +71,12 @@ export default function RunnerPage() {
   async function load() {
     setStatus("Loading...");
 
-    // 1) Who am I?
     const {
       data: { user },
       error: userErr,
     } = await supabase.auth.getUser();
 
     if (userErr || !user) {
-      // Not logged in → go to login
       window.location.href = "/login";
       return;
     }
@@ -88,7 +84,6 @@ export default function RunnerPage() {
     setMe(user.id);
     setMyEmail(user.email ?? null);
 
-    // 2) Runner access gate (this is what allows “user + runner”)
     const email = user.email ?? "";
     if (!email) {
       setIsRunner(false);
@@ -107,7 +102,6 @@ export default function RunnerPage() {
       return;
     }
 
-    // ✅ One select string used everywhere (includes order_items)
     const orderSelect = `
       id,
       status,
@@ -124,7 +118,6 @@ export default function RunnerPage() {
       )
     `;
 
-    // QUEUE: queued + unassigned + not expired
     const { data: qData, error: qErr } = await supabase
       .from("orders")
       .select(orderSelect)
@@ -138,7 +131,6 @@ export default function RunnerPage() {
       return;
     }
 
-    // IN PROGRESS: my accepted orders
     const { data: pData, error: pErr } = await supabase
       .from("orders")
       .select(orderSelect)
@@ -151,7 +143,6 @@ export default function RunnerPage() {
       return;
     }
 
-    // HISTORY: my delivered/cancelled
     const { data: hData, error: hErr } = await supabase
       .from("orders")
       .select(orderSelect)
@@ -173,7 +164,6 @@ export default function RunnerPage() {
 
   async function accept(id: string) {
     setStatus("Accepting...");
-
     const { data, error } = await supabase.rpc("accept_order", {
       p_order_id: id,
     });
@@ -212,7 +202,6 @@ export default function RunnerPage() {
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const Section = ({
@@ -233,12 +222,8 @@ export default function RunnerPage() {
         background: "rgba(255,255,255,0.03)",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-        <div>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-          {subtitle ? <div style={{ opacity: 0.75, fontSize: 13 }}>{subtitle}</div> : null}
-        </div>
-      </div>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+      {subtitle ? <div style={{ opacity: 0.75, fontSize: 13 }}>{subtitle}</div> : null}
       <div style={{ marginTop: 10, display: "grid", gap: 10 }}>{children}</div>
     </section>
   );
@@ -286,123 +271,45 @@ export default function RunnerPage() {
                 <div
                   key={it.id}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "baseline",
-                    gap: 10,
                     padding: "8px 10px",
                     borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.14)",
                     background: "rgba(255,255,255,0.02)",
+                    display: "grid",
+                    gap: 4,
                   }}
                 >
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>{it.name ?? "—"}</div>
-                  <div style={{ opacity: 0.85, fontSize: 13 }}>x{it.qty ?? 1}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ fontWeight: 800, fontSize: 13 }}>{it.name ?? "—"}</div>
+                    <div style={{ opacity: 0.85, fontSize: 13 }}>x{it.qty ?? 1}</div>
+                  </div>
+
+                  {it.notes && it.notes.trim() ? (
+                    <div style={{ opacity: 0.8, fontSize: 12 }}>
+                      <strong>Note:</strong> {it.notes}
+                    </div>
+                  ) : null}
                 </div>
               ))}
-
-              {o.order_items.some((x) => x.notes) ? (
-                <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
-                  Notes:{" "}
-                  {o.order_items
-                    .map((x) => x.notes)
-                    .filter(Boolean)
-                    .join(" • ")}
-                </div>
-              ) : null}
             </div>
           )}
         </div>
 
-        <div style={{ opacity: 0.75, fontSize: 12, marginTop: 8 }}>Order ID: {o.id}</div>
+        <div style={{ opacity: 0.75, fontSize: 12, marginTop: 8 }}>
+          Order ID: {o.id}
+        </div>
       </div>
 
       <div onClick={(e) => e.stopPropagation()}>{right ?? null}</div>
     </div>
   );
 
-  // If logged in but not a runner, show a clear screen
-  if (me && !isRunner) {
-    return (
-      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
-        <div style={{ width: "100%", maxWidth: 640, padding: 24 }}>
-          <h1 style={{ fontSize: 30, fontWeight: 900, marginBottom: 6 }}>Runner</h1>
-          <div style={{ opacity: 0.85, marginBottom: 14 }}>
-            This account is signed in{myEmail ? ` (${myEmail})` : ""}, but it is not authorized as a runner.
-          </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <a
-              href="/account"
-              style={{
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.02)",
-                color: "white",
-                textDecoration: "none",
-                fontWeight: 900,
-              }}
-            >
-              ← Back to Account
-            </a>
-
-            <a
-              href="/runner/signup"
-              style={{
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "white",
-                color: "black",
-                textDecoration: "none",
-                fontWeight: 900,
-                textAlign: "center",
-              }}
-            >
-              Runner Signup / Request Access
-            </a>
-          </div>
-
-          {status ? <div style={{ marginTop: 12, opacity: 0.85 }}>{status}</div> : null}
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 900, padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-          <div>
-            <h1 style={{ fontSize: 30, fontWeight: 900, marginBottom: 6 }}>Runner</h1>
-            <div style={{ opacity: 0.8 }}>Queue → In Progress → Delivered (auto-refresh every 5s)</div>
-            {me ? <div style={{ opacity: 0.6, fontSize: 12, marginTop: 4 }}>Runner ID: {me}</div> : null}
-          </div>
+        <h1 style={{ fontSize: 30, fontWeight: 900 }}>Runner</h1>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <a href="/account" style={{ opacity: 0.85, textDecoration: "none" }}>
-              ← Account
-            </a>
-
-            <button
-              onClick={clearAllOrders}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.2)",
-                background: "rgba(255,0,0,0.15)",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              🚨 Emergency: Clear All Orders
-            </button>
-          </div>
-        </div>
-
-        <Section title="Queue" subtitle="Orders waiting to be accepted">
+        <Section title="Queue">
           {queue.length === 0 ? (
             <div style={{ opacity: 0.75 }}>No queued orders.</div>
           ) : (
@@ -431,83 +338,6 @@ export default function RunnerPage() {
             ))
           )}
         </Section>
-
-        <Section title="In Progress" subtitle="Orders you accepted (next action: Delivered)">
-          {inProgress.length === 0 ? (
-            <div style={{ opacity: 0.75 }}>No orders in progress.</div>
-          ) : (
-            inProgress.map((o) => (
-              <OrderCard
-                key={o.id}
-                o={o}
-                onOpen={() => (window.location.href = `/runner/orders/${o.id}`)}
-                right={
-                  <button
-                    onClick={() => markDelivered(o.id)}
-                    style={{
-                      padding: "12px 14px",
-                      borderRadius: 14,
-                      background: "white",
-                      color: "black",
-                      fontWeight: 900,
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Delivered
-                  </button>
-                }
-              />
-            ))
-          )}
-        </Section>
-
-        <section style={{ marginTop: 18 }}>
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.03)",
-              color: "white",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <span>History</span>
-            <span style={{ opacity: 0.85, fontWeight: 800 }}>{showHistory ? "Hide ▲" : `Show (${history.length}) ▼`}</span>
-          </button>
-
-          {showHistory ? (
-            <div
-              style={{
-                marginTop: 10,
-                padding: 14,
-                borderRadius: 18,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.02)",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              {history.length === 0 ? (
-                <div style={{ opacity: 0.75 }}>No history yet.</div>
-              ) : (
-                history.map((o) => (
-                  <OrderCard key={o.id} o={o} onOpen={() => (window.location.href = `/runner/orders/${o.id}`)} />
-                ))
-              )}
-            </div>
-          ) : null}
-        </section>
-
-        {status ? <div style={{ marginTop: 12, opacity: 0.85 }}>{status}</div> : null}
       </div>
     </main>
   );
