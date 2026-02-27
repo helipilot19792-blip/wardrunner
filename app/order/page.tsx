@@ -51,16 +51,21 @@ function OrderPageInner() {
   const [store, setStore] = useState<Store>("TIMS");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customItem, setCustomItem] = useState("");
+  const [toast, setToast] = useState<{ text: string; ts: number } | null>(null);
+const [lastAddedTs, setLastAddedTs] = useState<number>(0);
 
   // Track viewport width for responsive grid
-  const [isMobile, setIsMobile] = useState(false);
+const [vw, setVw] = useState<number>(9999);
 
-  useEffect(() => {
-    const update = () => setIsMobile(window.innerWidth < 700);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+useEffect(() => {
+  const update = () => setVw(window.innerWidth);
+  update();
+  window.addEventListener("resize", update);
+  return () => window.removeEventListener("resize", update);
+}, []);
+
+const isMobile = vw < 700;
+const isTiny = vw < 380;
 
   // ✅ On mount: rehydrate from sessionStorage if a draft exists
   useEffect(() => {
@@ -126,9 +131,17 @@ function OrderPageInner() {
     return `${category} • ${storeLabel}`;
   }, [category, store]);
 
-  function addItem(name: string) {
-    setCart((prev) => [...prev, { id: uid(), name, qty: 1, notes: "" }]);
-  }
+ function addItem(name: string) {
+  setCart((prev) => [...prev, { id: uid(), name, qty: 1, notes: "" }]);
+
+  const ts = Date.now();
+  setLastAddedTs(ts);
+  setToast({ text: `Added: ${name}`, ts });
+
+  window.setTimeout(() => {
+    setToast((cur) => (cur?.ts === ts ? null : cur));
+  }, 1200);
+}
 
   function updateQty(id: string, qty: number) {
     setCart((prev) => prev.map((x) => (x.id === id ? { ...x, qty: Math.max(1, qty) } : x)));
@@ -145,6 +158,61 @@ function OrderPageInner() {
   return (
     <main style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 720, padding: 24 }}>
+        {/* Floating confirmation + cart count */}
+<div
+  style={{
+    position: "fixed",
+    top: 14,
+    right: 14,
+    zIndex: 9999,
+    display: "grid",
+    gap: 8,
+    pointerEvents: "none",
+  }}
+>
+  {/* Cart count pill */}
+  <div
+    style={{
+      justifySelf: "end",
+      padding: "8px 10px",
+      borderRadius: 999,
+      background: "rgba(0,0,0,0.55)",
+      border: "1px solid rgba(255,255,255,0.18)",
+      backdropFilter: "blur(8px)",
+      color: "white",
+      fontWeight: 900,
+      fontSize: 13,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      transform: Date.now() - lastAddedTs < 900 ? "scale(1.05)" : "scale(1)",
+      transition: "transform 160ms ease",
+    }}
+  >
+    🛒 {cart.reduce((sum, x) => sum + x.qty, 0)} item{cart.reduce((sum, x) => sum + x.qty, 0) === 1 ? "" : "s"}
+  </div>
+
+  {/* Toast */}
+  {toast ? (
+    <div
+      style={{
+        justifySelf: "end",
+        maxWidth: 280,
+        padding: "10px 12px",
+        borderRadius: 14,
+        background: "rgba(255,255,255,0.12)",
+        border: "1px solid rgba(255,255,255,0.20)",
+        backdropFilter: "blur(10px)",
+        color: "white",
+        fontWeight: 900,
+        fontSize: 13,
+        boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
+      }}
+    >
+      ✅ {toast.text}
+    </div>
+  ) : null}
+</div>
         {/* ✅ WOW HERO HEADER */}
         <div
           style={{
@@ -259,8 +327,8 @@ function OrderPageInner() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-                gap: 12,
+                gridTemplateColumns: isTiny ? "1fr" : isMobile ? "1fr 1fr" : "1fr 1fr",
+gap: isMobile ? 10 : 12,
               }}
             >
               {timsQuickPicks.map((p) => (
@@ -284,7 +352,7 @@ function OrderPageInner() {
                     e.currentTarget.style.boxShadow = "0 14px 30px rgba(0,0,0,0.28)";
                   }}
                 >
-                  <div style={{ position: "relative", height: 130 }}>
+                  <div style={{ position: "relative", height: isMobile ? 86 : 130 }}>
                     <img
                       src={p.img}
                       alt={p.name}
@@ -320,7 +388,7 @@ function OrderPageInner() {
                     ) : null}
                   </div>
 
-                  <div style={{ padding: 12 }}>
+                  <div style={{ padding: isMobile ? 10 : 12 }}>
                     <div style={{ fontWeight: 950, letterSpacing: -0.2 }}>{p.name}</div>
 
                     <div
@@ -337,14 +405,14 @@ function OrderPageInner() {
                       <button
                         onClick={() => addItem(p.name)}
                         style={{
-                          padding: "10px 12px",
+                          padding: isMobile ? "8px 10px" : "10px 12px",
                           borderRadius: 999,
                           background: "white",
                           color: "black",
                           fontWeight: 950,
                           border: "none",
                           cursor: "pointer",
-                          minWidth: 92,
+                          minWidth: isMobile ? 76 : 92,
                         }}
                       >
                         + Add
