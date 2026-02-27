@@ -220,19 +220,40 @@ export default function RunnerPage() {
 useEffect(() => {
   load();
 
-  // Realtime push updates (orders table)
+  // Debounce refresh so order_items has time to insert after orders insert
+  let t: any = null;
+  const refreshSoon = () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      console.log("[realtime] refresh load()");
+      load();
+    }, 250);
+  };
+
   const channel = supabase
     .channel("runner-orders")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "orders" },
-      () => {
-        load();
+      (payload) => {
+        console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
+        refreshSoon();
       }
     )
-    .subscribe();
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "order_items" },
+      (payload) => {
+        console.log("[realtime] order_items", payload.eventType, payload.new?.order_id ?? payload.old?.order_id);
+        refreshSoon();
+      }
+    )
+    .subscribe((status) => {
+      console.log("[realtime] subscribe status:", status);
+    });
 
   return () => {
+    if (t) clearTimeout(t);
     supabase.removeChannel(channel);
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
