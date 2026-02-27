@@ -217,12 +217,26 @@ export default function RunnerPage() {
     await load();
   }
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+useEffect(() => {
+  load();
+
+  // Realtime push updates (orders table)
+  const channel = supabase
+    .channel("runner-orders")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "orders" },
+      () => {
+        load();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const Section = ({
     title,
@@ -267,11 +281,11 @@ export default function RunnerPage() {
         padding: 14,
         borderRadius: 18,
         border:
-          o.status === "QUEUED"
+          ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
             ? "2px solid rgba(255,0,0,0.7)"
             : "1px solid rgba(255,255,255,0.14)",
         background:
-          o.status === "QUEUED"
+          ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
             ? "rgba(255,0,0,0.10)"
             : "rgba(255,255,255,0.02)",
         display: "grid",
@@ -411,7 +425,7 @@ export default function RunnerPage() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
           <div>
             <h1 style={{ fontSize: 30, fontWeight: 900, marginBottom: 6 }}>Runner</h1>
-            <div style={{ opacity: 0.8 }}>Queue → In Progress → Delivered (auto-refresh every 5s)</div>
+            <div style={{ opacity: 0.8 }}>Queue → In Progress → Delivered (live updates)</div>
             {me ? <div style={{ opacity: 0.6, fontSize: 12, marginTop: 4 }}>Runner ID: {me}</div> : null}
           </div>
 
