@@ -9,6 +9,7 @@ type OrderRow = {
   store: string;
   delivery_destination: string | null;
   created_at: string;
+  cancel_reason: string | null;
 };
 
 function prettyStore(s: string) {
@@ -19,22 +20,30 @@ function prettyStore(s: string) {
   return s;
 }
 
-function statusLabel(status: string) {
-  // friendly labels for exec demo
+function statusLabel(status: string, cancelReason?: string | null) {
   switch (status) {
     case "QUEUED":
       return "Queued (waiting for runner)";
+
     case "ACCEPTED":
       return "Accepted (runner assigned)";
+
     case "SHOPPING":
       return "Ordered / Shopping";
+
     case "DELIVERING":
       return "Delivering";
+
     case "DELIVERED":
       return "Delivered";
+
     case "CANCELLED":
     case "CANCELED":
+      if (cancelReason === "TIMED_OUT") {
+        return "Timed out (not accepted in time)";
+      }
       return "Cancelled";
+
     default:
       return status;
   }
@@ -60,7 +69,7 @@ export default function MyOrdersPage() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id,status,store,delivery_destination,created_at")
+      .select("id,status,store,delivery_destination,created_at,cancel_reason")
       .eq("created_by", user.id)
       .order("created_at", { ascending: false })
       .limit(3);
@@ -128,7 +137,9 @@ export default function MyOrdersPage() {
                       <div style={{ opacity: 0.9, fontWeight: 900 }}>{o.status}</div>
                     </div>
 
-                    <div style={{ opacity: 0.85, fontSize: 13 }}>{statusLabel(o.status)}</div>
+                    <div style={{ opacity: 0.85, fontSize: 13 }}>
+                     {statusLabel(o.status, o.cancel_reason)}
+                    </div>
 
                     <div style={{ opacity: 0.75, fontSize: 12 }}>
                       {o.status === "DELIVERED"

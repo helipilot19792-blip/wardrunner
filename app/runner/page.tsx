@@ -18,7 +18,9 @@ type OrderRow = {
   created_at: string;
   runner_id: string | null;
   expires_at: string | null;
-   notes: string | null;
+  notes: string | null;
+  created_by: string | null;
+  profiles?: { full_name: string | null } | null;
   order_items?: OrderItemRow[];
 };
 
@@ -73,7 +75,8 @@ export default function RunnerPage() {
 
   async function load() {
     setStatus("Loading...");
-
+    // Expire timed-out orders before loading anything
+    await supabase.rpc("expire_orders");
     // 1) Who am I?
     const {
       data: { user },
@@ -118,6 +121,10 @@ export default function RunnerPage() {
   runner_id,
   expires_at,
   notes,
+  created_by,
+  profiles:profiles!orders_created_by_fkey (
+    full_name
+  ),
   order_items (
     id,
     name,
@@ -259,8 +266,14 @@ export default function RunnerPage() {
       style={{
         padding: 14,
         borderRadius: 18,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "rgba(255,255,255,0.02)",
+        border:
+          o.status === "QUEUED"
+            ? "2px solid rgba(255,0,0,0.7)"
+            : "1px solid rgba(255,255,255,0.14)",
+        background:
+          o.status === "QUEUED"
+            ? "rgba(255,0,0,0.10)"
+            : "rgba(255,255,255,0.02)",
         display: "grid",
         gridTemplateColumns: "1fr auto",
         gap: 12,
@@ -272,26 +285,35 @@ export default function RunnerPage() {
         <div style={{ fontWeight: 900 }}>
           {o.store} • {o.delivery_destination ?? "—"}
         </div>
+        <div style={{ opacity: 0.9, fontSize: 14, fontWeight: 900, marginTop: 6 }}>
+          Customer: {o.profiles?.full_name ?? "Unknown"}
+        </div>
 
-        <div style={{ opacity: 0.8, fontSize: 13 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: o.status === "QUEUED" ? 900 : 600,
+            color: o.status === "QUEUED" ? "rgb(255,70,70)" : "rgba(255,255,255,0.8)",
+          }}
+        >
           {o.status} • {new Date(o.created_at).toLocaleString()}
         </div>
-{o.notes && o.notes.trim() ? (
-  <div
-    style={{
-      marginTop: 8,
-      padding: "10px 12px",
-      borderRadius: 14,
-      border: "2px solid rgba(255,255,255,0.25)",
-      background: "rgba(255,255,255,0.06)",
-      fontSize: 16,
-      fontWeight: 900,
-      letterSpacing: 0.3,
-    }}
-  >
-    ⚠ ORDER NOTE: {o.notes}
-  </div>
-) : null}
+        {o.notes && o.notes.trim() ? (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "2px solid rgba(255,255,255,0.25)",
+              background: "rgba(255,255,255,0.06)",
+              fontSize: 16,
+              fontWeight: 900,
+              letterSpacing: 0.3,
+            }}
+          >
+            ⚠ ORDER NOTE: {o.notes}
+          </div>
+        ) : null}
         <div style={{ marginTop: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>Items</div>
 
