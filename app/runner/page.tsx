@@ -225,8 +225,8 @@ useEffect(() => {
   const refreshSoon = () => {
     if (t) clearTimeout(t);
     t = setTimeout(() => {
-      console.log("[realtime] refresh load()");
-      load();
+      console.log("[realtime] refresh load()", new Date().toISOString());
+load().catch((e) => console.error("[realtime] load() threw", e));
     }, 250);
   };
 
