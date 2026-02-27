@@ -230,27 +230,37 @@ useEffect(() => {
     }, 250);
   };
 
-  const channel = supabase
-    .channel("runner-orders")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "orders" },
-      (payload) => {
-        console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
-        refreshSoon();
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "order_items" },
-      (payload) => {
-        console.log("[realtime] order_items", payload.eventType, payload.new?.order_id ?? payload.old?.order_id);
-        refreshSoon();
-      }
-    )
-    .subscribe((status) => {
-      console.log("[realtime] subscribe status:", status);
-    });
+ const channel = supabase
+  .channel("runner-orders")
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "orders" },
+    (payload) => {
+      const anyPayload = payload as any;
+      console.log(
+        "[realtime] orders",
+        anyPayload.eventType,
+        anyPayload.new?.id ?? anyPayload.old?.id
+      );
+      refreshSoon();
+    }
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "order_items" },
+    (payload) => {
+      const anyPayload = payload as any;
+      console.log(
+        "[realtime] order_items",
+        anyPayload.eventType,
+        anyPayload.new?.order_id ?? anyPayload.old?.order_id
+      );
+      refreshSoon();
+    }
+  )
+  .subscribe((status) => {
+    console.log("[realtime] subscribe status:", status);
+  });
 
   return () => {
     if (t) clearTimeout(t);
