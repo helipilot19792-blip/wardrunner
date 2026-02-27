@@ -246,10 +246,19 @@ useEffect(() => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
-        (payload: any) => {
-          console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
-          refreshSoon();
-        }
+      (payload: any) => {
+  console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
+
+  // 🔔 sound on NEW order only
+  if (payload.eventType === "INSERT") {
+    try {
+      const audio = new Audio("/new-order.mp3");
+      audio.play().catch(() => {});
+    } catch {}
+  }
+
+  refreshSoon();
+}
       )
       .on(
         "postgres_changes",
