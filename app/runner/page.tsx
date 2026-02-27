@@ -218,53 +218,54 @@ export default function RunnerPage() {
   }
 
 useEffect(() => {
-  load();
+  let channel: any = null;
 
-  // Debounce refresh so order_items has time to insert after orders insert
-  let t: any = null;
-  const refreshSoon = () => {
-    if (t) clearTimeout(t);
-    t = setTimeout(() => {
-      console.log("[realtime] refresh load()", new Date().toISOString());
-load().catch((e) => console.error("[realtime] load() threw", e));
-    }, 250);
-  };
+  (async () => {
+    // 1) load first (this does auth + runner allowlist gate)
+    await load();
 
- const channel = supabase
-  .channel("runner-orders")
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "orders" },
-    (payload) => {
-      const anyPayload = payload as any;
-      console.log(
-        "[realtime] orders",
-        anyPayload.eventType,
-        anyPayload.new?.id ?? anyPayload.old?.id
-      );
-      refreshSoon();
-    }
-  )
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "order_items" },
-    (payload) => {
-      const anyPayload = payload as any;
-      console.log(
-        "[realtime] order_items",
-        anyPayload.eventType,
-        anyPayload.new?.order_id ?? anyPayload.old?.order_id
-      );
-      refreshSoon();
-    }
-  )
-  .subscribe((status) => {
-    console.log("[realtime] subscribe status:", status);
-  });
+    // If you’re not a runner, don’t subscribe
+    // (load() already sets isRunner, but state updates async; so we re-check auth quickly)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 2) subscribe AFTER auth is definitely present
+    let t: any = null;
+    const refreshSoon = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => {
+        console.log("[realtime] refresh load()");
+        load();
+      }, 250);
+    };
+
+    channel = supabase
+      .channel("runner-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        (payload: any) => {
+          console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
+          refreshSoon();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_items" },
+        (payload: any) => {
+          console.log("[realtime] order_items", payload.eventType, payload.new?.id ?? payload.old?.id);
+          refreshSoon();
+        }
+      )
+      .subscribe((status: any) => {
+        console.log("[realtime] subscribe status:", status);
+      });
+  })();
 
   return () => {
-    if (t) clearTimeout(t);
-    supabase.removeChannel(channel);
+    if (channel) supabase.removeChannel(channel);
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
