@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type OrderItemRow = {
@@ -60,23 +60,33 @@ export default function RunnerPage() {
   const [status, setStatus] = useState<string>("");
   const [showHistory, setShowHistory] = useState(false);
 
+  // 🔔 sound tracking
+  const prevQueueCountRef = useRef<number | null>(null);
+  const lastSoundAtRef = useRef<number>(0);
+
+  function playNewOrderSound() {
+    try {
+      const audio = new Audio("/new-order.mp3");
+      audio.volume = 0.9;
+      audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
   async function checkRunnerAccess(email: string) {
     // must match your table name: runner_allowlist(email text primary key)
-    const { data, error } = await supabase
-      .from("runner_allowlist")
-      .select("email")
-      .eq("email", email)
-      .maybeSingle();
-
-    // If RLS blocks or no row, treat as not-runner
+    const { data, error } = await supabase.from("runner_allowlist").select("email").eq("email", email).maybeSingle();
     if (error || !data) return false;
     return true;
   }
 
   async function load() {
     setStatus("Loading...");
+
     // Expire timed-out orders before loading anything
     await supabase.rpc("expire_orders");
+
     // 1) Who am I?
     const {
       data: { user },
@@ -84,7 +94,6 @@ export default function RunnerPage() {
     } = await supabase.auth.getUser();
 
     if (userErr || !user) {
-      // Not logged in → go to login
       window.location.href = "/login";
       return;
     }
@@ -92,7 +101,7 @@ export default function RunnerPage() {
     setMe(user.id);
     setMyEmail(user.email ?? null);
 
-    // 2) Runner access gate (this is what allows “user + runner”)
+    // 2) Runner access gate
     const email = user.email ?? "";
     if (!email) {
       setIsRunner(false);
@@ -113,25 +122,25 @@ export default function RunnerPage() {
 
     // ✅ One select string used everywhere (includes order_items)
     const orderSelect = `
-  id,
-  status,
-  store,
-  delivery_destination,
-  created_at,
-  runner_id,
-  expires_at,
-  notes,
-  created_by,
-  profiles:profiles!orders_created_by_fkey (
-    full_name
-  ),
-  order_items (
-    id,
-    name,
-    qty,
-    notes
-  )
-`;
+      id,
+      status,
+      store,
+      delivery_destination,
+      created_at,
+      runner_id,
+      expires_at,
+      notes,
+      created_by,
+      profiles:profiles!orders_created_by_fkey (
+        full_name
+      ),
+      order_items (
+        id,
+        name,
+        qty,
+        notes
+      )
+    `;
 
     // QUEUE: queued + unassigned + not expired
     const { data: qData, error: qErr } = await supabase
@@ -174,10 +183,24 @@ export default function RunnerPage() {
       return;
     }
 
-    setQueue((qData as any) ?? []);
+    // ✅ update UI
+    const nextQueue = ((qData as any) ?? []) as OrderRow[];
+    setQueue(nextQueue);
     setInProgress((pData as any) ?? []);
     setHistory((hData as any) ?? []);
     setStatus("");
+
+    // 🔔 Sound when queue grows (NO sound on first load)
+    const now = Date.now();
+    if (prevQueueCountRef.current === null) {
+      prevQueueCountRef.current = nextQueue.length;
+    } else {
+      if (nextQueue.length > prevQueueCountRef.current && now - lastSoundAtRef.current > 1500) {
+        playNewOrderSound();
+        lastSoundAtRef.current = now;
+      }
+      prevQueueCountRef.current = nextQueue.length;
+    }
   }
 
   async function accept(id: string) {
@@ -217,67 +240,50 @@ export default function RunnerPage() {
     await load();
   }
 
-useEffect(() => {
-  let channel: any = null;
-
-  (async () => {
-    // 1) load first (this does auth + runner allowlist gate)
-    await load();
-
-    // If you’re not a runner, don’t subscribe
-    // (load() already sets isRunner, but state updates async; so we re-check auth quickly)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 2) subscribe AFTER auth is definitely present
+  useEffect(() => {
+    let channel: any = null;
     let t: any = null;
-    const refreshSoon = () => {
-      if (t) clearTimeout(t);
-      t = setTimeout(() => {
-        console.log("[realtime] refresh load()");
-        load();
-      }, 250);
-    };
 
-    channel = supabase
-      .channel("runner-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-      (payload: any) => {
-  console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
+    (async () => {
+      // 1) load first (auth + allowlist gate)
+      await load();
 
-  // 🔔 sound on NEW order only
-  if (payload.eventType === "INSERT") {
-    try {
-      const audio = new Audio("/new-order.mp3");
-      audio.play().catch(() => {});
-    } catch {}
-  }
+      // 2) subscribe AFTER auth is definitely present
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-  refreshSoon();
-}
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "order_items" },
-        (payload: any) => {
+      const refreshSoon = () => {
+        if (t) clearTimeout(t);
+        t = setTimeout(() => {
+          console.log("[realtime] refresh load()");
+          load();
+        }, 250);
+      };
+
+      channel = supabase
+        .channel("runner-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload: any) => {
+          console.log("[realtime] orders", payload.eventType, payload.new?.id ?? payload.old?.id);
+          // no direct sound here; load() will ding when queue grows
+          refreshSoon();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, (payload: any) => {
           console.log("[realtime] order_items", payload.eventType, payload.new?.id ?? payload.old?.id);
           refreshSoon();
-        }
-      )
-      .subscribe((status: any) => {
-        console.log("[realtime] subscribe status:", status);
-      });
-  })();
+        })
+        .subscribe((s: any) => {
+          console.log("[realtime] subscribe status:", s);
+        });
+    })();
 
-  return () => {
-    if (channel) supabase.removeChannel(channel);
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    return () => {
+      if (t) clearTimeout(t);
+      if (channel) supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const Section = ({
     title,
@@ -321,14 +327,12 @@ useEffect(() => {
       style={{
         padding: 14,
         borderRadius: 18,
-        border:
-          ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
-            ? "2px solid rgba(255,0,0,0.7)"
-            : "1px solid rgba(255,255,255,0.14)",
-        background:
-          ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
-            ? "rgba(255,0,0,0.10)"
-            : "rgba(255,255,255,0.02)",
+        border: ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
+          ? "2px solid rgba(255,0,0,0.7)"
+          : "1px solid rgba(255,255,255,0.14)",
+        background: ["QUEUED", "PENDING_ACCEPTANCE"].includes(o.status)
+          ? "rgba(255,0,0,0.10)"
+          : "rgba(255,255,255,0.02)",
         display: "grid",
         gridTemplateColumns: "1fr auto",
         gap: 12,
@@ -340,6 +344,7 @@ useEffect(() => {
         <div style={{ fontWeight: 900 }}>
           {o.store} • {o.delivery_destination ?? "—"}
         </div>
+
         <div style={{ opacity: 0.9, fontSize: 14, fontWeight: 900, marginTop: 6 }}>
           Customer: {o.profiles?.full_name ?? "Unknown"}
         </div>
@@ -353,6 +358,7 @@ useEffect(() => {
         >
           {o.status} • {new Date(o.created_at).toLocaleString()}
         </div>
+
         {o.notes && o.notes.trim() ? (
           <div
             style={{
@@ -369,6 +375,7 @@ useEffect(() => {
             ⚠ ORDER NOTE: {o.notes}
           </div>
         ) : null}
+
         <div style={{ marginTop: 10 }}>
           <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>Items</div>
 
@@ -571,7 +578,9 @@ useEffect(() => {
             }}
           >
             <span>History</span>
-            <span style={{ opacity: 0.85, fontWeight: 800 }}>{showHistory ? "Hide ▲" : `Show (${history.length}) ▼`}</span>
+            <span style={{ opacity: 0.85, fontWeight: 800 }}>
+              {showHistory ? "Hide ▲" : `Show (${history.length}) ▼`}
+            </span>
           </button>
 
           {showHistory ? (
